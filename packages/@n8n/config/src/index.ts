@@ -7,6 +7,8 @@ import { ExternalSecretsConfig } from './configs/external-secrets.config';
 import { ExternalStorageConfig } from './configs/external-storage.config';
 import { NodesConfig } from './configs/nodes.config';
 import { PublicApiConfig } from './configs/public-api.config';
+import { TaskRunnersConfig } from './configs/runners.config';
+export { TaskRunnersConfig } from './configs/runners.config';
 import { ScalingModeConfig } from './configs/scaling-mode.config';
 import { SentryConfig } from './configs/sentry.config';
 import { TemplatesConfig } from './configs/templates.config';
@@ -81,4 +83,7 @@ export class GlobalConfig {
 
 	@Nested
 	queue: ScalingModeConfig;
+
+	@Nested
+	taskRunners: TaskRunnersConfig;
 }
