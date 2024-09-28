@@ -1293,7 +1293,7 @@ export class WorkflowExecute {
 														pairedItemData,
 													);
 
-													if (constPairedItem === null) {
+													if (constPairedItem === null || constPairedItem === undefined) {
 														errorItems.push(item);
 													} else {
 														errorItems.push({

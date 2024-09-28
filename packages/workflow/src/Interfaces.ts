@@ -1956,7 +1956,7 @@ export interface IWorkflowDataProxyData {
 		destinationNodeName: string,
 		incomingSourceData: ISourceData | null,
 		pairedItem: IPairedItemData,
-	) => INodeExecutionData | null;
+	) => INodeExecutionData | null | undefined;
 	constructor: any;
 }
 
