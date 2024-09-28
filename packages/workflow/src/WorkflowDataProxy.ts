@@ -1303,6 +1303,36 @@ export class WorkflowDataProxy {
 				);
 				return dataProxy.getDataProxy();
 			},
+			$fromAI: (
+				name: string,
+				_description?: string,
+				_type: string = 'string',
+				defaultValue?: unknown,
+			) => {
+				const nameValidationRegex = /^[a-zA-Z0-9_-]{1,64}$/;
+				if (!nameValidationRegex.test(name)) {
+					throw new ExpressionError(
+						'Invalid parameter name, must be between 1 and 64 characters long and only contain lowercase letters, uppercase letters, numbers, underscores, and hyphens',
+						{
+							runIndex: that.runIndex,
+							itemIndex: that.itemIndex,
+						},
+					);
+				}
+				const placeholdersDataInputData =
+					that.runExecutionData?.resultData.runData[that.activeNodeName]?.[0].inputOverride?.[
+						NodeConnectionType.AiTool
+					]?.[0]?.[0].json;
+
+				if (Boolean(!placeholdersDataInputData)) {
+					throw new ExpressionError('No execution data available', {
+						runIndex: that.runIndex,
+						itemIndex: that.itemIndex,
+						type: 'no_execution_data',
+					});
+				}
+				return placeholdersDataInputData?.[name] ?? defaultValue;
+			},
 			$items: (nodeName?: string, outputIndex?: number, runIndex?: number) => {
 				if (nodeName === undefined) {
 					nodeName = (that.prevNodeGetter() as { name: string }).name;
