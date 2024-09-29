@@ -1,13 +1,10 @@
 import { runInNewContext, type Context } from 'node:vm';
-
 import {
 	type INode,
 	type INodeType,
 	type ITaskDataConnections,
 	WorkflowDataProxy,
 	type WorkflowParameters,
-} from 'n8n-workflow';
-import {
 	type IDataObject,
 	type IExecuteData,
 	type INodeExecutionData,
