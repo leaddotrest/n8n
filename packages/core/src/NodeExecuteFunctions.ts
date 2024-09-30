@@ -102,6 +102,13 @@ import type {
 	EnsureTypeOptions,
 	SSHTunnelFunctions,
 	SchedulingFunctions,
+	CheckProcessedHelperFunctions,
+	ICheckProcessedOutput,
+	ICheckProcessedOutputItems,
+	ICheckProcessedOptions,
+	ProcessedDataContext,
+	ProcessedDataItemTypes,
+	ICheckProcessedContextData,
 	AiEvent,
 } from 'n8n-workflow';
 import {
@@ -157,6 +164,7 @@ import {
 import { extractValue } from './ExtractValue';
 import { InstanceSettings } from './InstanceSettings';
 import type { ExtendedValidationResult, IResponseError } from './Interfaces';
+import { ProcessedDataManager } from './processed-data-manager';
 import { ScheduledTaskManager } from './ScheduledTaskManager';
 import { getSecretsProxy } from './Secrets';
 import { SSHClientsManager } from './SSHClientsManager';
@@ -1283,6 +1291,87 @@ async function prepareBinaryData(
 	return await setBinaryDataBuffer(returnData, binaryData, workflowId, executionId);
 }
 
+export async function checkProcessed(
+	items: ProcessedDataItemTypes[],
+	context: ProcessedDataContext,
+	contextData: ICheckProcessedContextData,
+	options: ICheckProcessedOptions,
+): Promise<ICheckProcessedOutput> {
+	return await ProcessedDataManager.getInstance().checkProcessed(
+		items,
+		context,
+		contextData,
+		options,
+	);
+}
+
+export async function checkProcessedAndRecord(
+	items: ProcessedDataItemTypes[],
+	context: ProcessedDataContext,
+	contextData: ICheckProcessedContextData,
+	options: ICheckProcessedOptions,
+): Promise<ICheckProcessedOutput> {
+	return await ProcessedDataManager.getInstance().checkProcessedAndRecord(
+		items,
+		context,
+		contextData,
+		options,
+	);
+}
+
+export async function checkProcessedItemsAndRecord(
+	key: string,
+	items: IDataObject[],
+	// items: ProcessedDataItemTypes[],
+	context: ProcessedDataContext,
+	contextData: ICheckProcessedContextData,
+	options: ICheckProcessedOptions,
+): Promise<ICheckProcessedOutputItems> {
+	return await ProcessedDataManager.getInstance().checkProcessedItemsAndRecord(
+		key,
+		items,
+		context,
+		contextData,
+		options,
+	);
+}
+
+export async function removeProcessed(
+	items: ProcessedDataItemTypes[],
+	context: ProcessedDataContext,
+	contextData: ICheckProcessedContextData,
+	options: ICheckProcessedOptions,
+): Promise<void> {
+	return await ProcessedDataManager.getInstance().removeProcessed(
+		items,
+		context,
+		contextData,
+		options,
+	);
+}
+
+export async function clearAllProcessedItems(
+	context: ProcessedDataContext,
+	contextData: ICheckProcessedContextData,
+	options: ICheckProcessedOptions,
+): Promise<void> {
+	return await ProcessedDataManager.getInstance().clearAllProcessedItems(
+		context,
+		contextData,
+		options,
+	);
+}
+export async function getProcessedDataCount(
+	context: ProcessedDataContext,
+	contextData: ICheckProcessedContextData,
+	options: ICheckProcessedOptions,
+): Promise<number> {
+	return await ProcessedDataManager.getInstance().getProcessedDataCount(
+		context,
+		contextData,
+		options,
+	);
+}
 function applyPaginationRequestData(
 	requestData: IRequestOptions,
 	paginationRequestData: PaginationOptions['request'],
@@ -3452,6 +3541,60 @@ const getBinaryHelperFunctions = (
 	},
 });
 
+const getCheckProcessedHelperFunctions = (
+	workflow: Workflow,
+	node: INode,
+): CheckProcessedHelperFunctions => ({
+	async checkProcessed(
+		items: ProcessedDataItemTypes[],
+		context: ProcessedDataContext,
+		options: ICheckProcessedOptions,
+	): Promise<ICheckProcessedOutput> {
+		return await checkProcessed(items, context, { node, workflow }, options);
+	},
+	async checkProcessedAndRecord(
+		items: ProcessedDataItemTypes[],
+		context: ProcessedDataContext,
+		options: ICheckProcessedOptions,
+	): Promise<ICheckProcessedOutput> {
+		return await checkProcessedAndRecord(items, context, { node, workflow }, options);
+	},
+	async checkProcessedItemsAndRecord(
+		propertyName: string,
+		items: IDataObject[],
+		// items: ProcessedDataItemTypes[],
+		context: ProcessedDataContext,
+		options: ICheckProcessedOptions,
+	): Promise<ICheckProcessedOutputItems> {
+		return await checkProcessedItemsAndRecord(
+			propertyName,
+			items,
+			context,
+			{ node, workflow },
+			options,
+		);
+	},
+	async removeProcessed(
+		items: ProcessedDataItemTypes[],
+		context: ProcessedDataContext,
+		options: ICheckProcessedOptions,
+	): Promise<void> {
+		return await removeProcessed(items, context, { node, workflow }, options);
+	},
+	async clearAllProcessedItems(
+		context: ProcessedDataContext,
+		options: ICheckProcessedOptions,
+	): Promise<void> {
+		return await clearAllProcessedItems(context, { node, workflow }, options);
+	},
+	async getProcessedDataCount(
+		context: ProcessedDataContext,
+		options: ICheckProcessedOptions,
+	): Promise<number> {
+		return await getProcessedDataCount(context, { node, workflow }, options);
+	},
+});
+
 /**
  * Returns a copy of the items which only contains the json data and
  * of that only the defined properties
@@ -3884,6 +4027,7 @@ export function getExecuteFunctions(
 				...getSSHTunnelFunctions(),
 				...getFileSystemHelperFunctions(node),
 				...getBinaryHelperFunctions(additionalData, workflow.id),
+				...getCheckProcessedHelperFunctions(workflow, node),
 				assertBinaryData: (itemIndex, propertyName) =>
 					assertBinaryData(inputData, node, itemIndex, propertyName, 0),
 				getBinaryDataBuffer: async (itemIndex, propertyName) =>
