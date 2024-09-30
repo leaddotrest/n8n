@@ -18,11 +18,13 @@ import {
 } from '@/constants';
 import { i18n as locale } from '@/plugins/i18n';
 import { useCredentialsStore } from '@/stores/credentials.store';
+import { useNDVStore } from '@/stores/ndv.store';
 import { useNodeTypesStore } from '@/stores/nodeTypes.store';
 import { useWorkflowsStore } from '@/stores/workflows.store';
 import type { ChatRequest } from '@/types/assistant.types';
 import { isResourceLocatorValue } from '@/utils/typeGuards';
 import { isJsonKeyObject } from '@/utils/typesUtils';
+import type { NodeApiError, NodeError, NodeOperationError } from 'n8n-workflow';
 import {
 	deepCopy,
 	type IDataObject,
@@ -579,6 +581,66 @@ export function processNodeForAssistant(node: INode, propsToRemove: string[]): I
 	);
 	nodeForLLM.parameters = resolvedParameters;
 	return nodeForLLM;
+}
+
+export function getNodeInfoForAssistant(node: INode) {
+	if (!node) {
+		return {};
+	}
+	const ndvStore = useNDVStore();
+	// Get all referenced nodes and their schemas
+	const referencedNodeNames = getReferencedNodes(node);
+	const schemas = getNodesSchemas(referencedNodeNames);
+
+	// Get node credentials details for the ai assistant
+	const nodeType = useNodeTypesStore().getNodeType(node.type);
+	let authType = undefined;
+	if (nodeType) {
+		const authField = getMainAuthField(nodeType);
+		const credentialInUse = node.parameters[authField?.name ?? ''];
+		const availableAuthOptions = getNodeAuthOptions(nodeType);
+		authType = availableAuthOptions.find((option) => option.value === credentialInUse);
+	}
+	let nodeInputData: { inputNodeName?: string; inputData?: IDataObject } | undefined = undefined;
+	const ndvInput = ndvStore.ndvInputData;
+	if (isNodeReferencingInputData(node) && ndvInput?.length) {
+		const inputData = ndvStore.ndvInputData[0].json;
+		const inputNodeName = ndvStore.input.nodeName;
+		nodeInputData = {
+			inputNodeName,
+			inputData,
+		};
+	}
+	return {
+		authType,
+		schemas,
+		nodeInputData,
+	};
+}
+
+/**
+ * Simplify node error object for AI assistant
+ */
+export function simplifyErrorForAssistant(
+	error: NodeError | NodeApiError | NodeOperationError,
+): ChatRequest.ErrorContext['error'] {
+	const simple: ChatRequest.ErrorContext['error'] = {
+		name: error.name,
+		message: error.message,
+	};
+	if ('type' in error) {
+		simple.type = error.type;
+	}
+	if ('description' in error && error.description) {
+		simple.description = error.description;
+	}
+	if (error.stack) {
+		simple.stack = error.stack;
+	}
+	if ('lineNumber' in error) {
+		simple.lineNumber = error.lineNumber;
+	}
+	return simple;
 }
 
 export function isNodeReferencingInputData(node: INode): boolean {

@@ -5,6 +5,7 @@ import {
 	STORES,
 	AI_ASSISTANT_EXPERIMENT,
 	PLACEHOLDER_EMPTY_WORKFLOW_ID,
+	CREDENTIAL_EDIT_MODAL_KEY,
 } from '@/constants';
 import type { ChatRequest } from '@/types/assistant.types';
 import type { ChatUI } from 'n8n-design-system/types/assistant';
@@ -17,26 +18,23 @@ import { useRoute } from 'vue-router';
 import { useSettingsStore } from './settings.store';
 import { assert } from '@/utils/assert';
 import { useWorkflowsStore } from './workflows.store';
-import type { IDataObject, ICredentialType, INodeParameters } from 'n8n-workflow';
+import type { ICredentialType, INodeParameters, NodeError, INode } from 'n8n-workflow';
 import { deepCopy } from 'n8n-workflow';
 import { ndvEventBus, codeNodeEditorEventBus } from '@/event-bus';
 import { useNDVStore } from './ndv.store';
 import type { IUpdateInformation } from '@/Interface';
 import {
-	getMainAuthField,
-	getNodeAuthOptions,
-	getReferencedNodes,
-	getNodesSchemas,
 	processNodeForAssistant,
-	isNodeReferencingInputData,
+	simplifyErrorForAssistant,
+	getNodeInfoForAssistant,
 } from '@/utils/nodeTypesUtils';
-import { useNodeTypesStore } from './nodeTypes.store';
 import { usePostHog } from './posthog.store';
 import { useI18n } from '@/composables/useI18n';
 import { useTelemetry } from '@/composables/useTelemetry';
 import { useToast } from '@/composables/useToast';
 import { useUIStore } from './ui.store';
 import AiUpdatedCodeMessage from '@/components/AiUpdatedCodeMessage.vue';
+import { useCredentialsStore } from './credentials.store';
 
 export const MAX_CHAT_WIDTH = 425;
 export const MIN_CHAT_WIDTH = 250;
@@ -355,10 +353,61 @@ export const useAssistantStore = defineStore(STORES.ASSISTANT, () => {
 		});
 	}
 
+	/**
+	 * Gets information about the current view and active node to provide context to the assistant
+	 */
+	function getVisualContext(): ChatRequest.UserContext | undefined {
+		if (chatSessionTask.value !== 'support') {
+			return undefined;
+		}
+		const currentView = route.name as VIEWS;
+		const activeNode = workflowsStore.activeNode();
+		const activeNodeForLLM = activeNode ? processNodeForAssistant(activeNode, ['position']) : null;
+		const activeModals = uiStore.activeModals;
+		const isCredentialModalActive = activeModals.includes(CREDENTIAL_EDIT_MODAL_KEY);
+		const activeCredential = isCredentialModalActive
+			? useCredentialsStore().getCredentialTypeByName(uiStore.activeCredentialType ?? '')
+			: undefined;
+		const executionResult = workflowsStore.workflowExecutionData?.data?.resultData;
+		const isCurrentNodeExecuted = Boolean(
+			executionResult?.runData?.hasOwnProperty(activeNode?.name ?? ''),
+		);
+		const currentNodeHasError =
+			executionResult?.error &&
+			'node' in executionResult.error &&
+			executionResult.error.node?.name === activeNode?.name;
+		const nodeError = currentNodeHasError ? (executionResult.error as NodeError) : undefined;
+		const executionStatus = isCurrentNodeExecuted
+			? {
+					status: nodeError ? 'error' : 'success',
+					error: nodeError ? simplifyErrorForAssistant(nodeError) : undefined,
+				}
+			: undefined;
+		return {
+			currentView,
+			activeNodeInfo: {
+				node: activeNodeForLLM ?? undefined,
+				nodeIssues: !isCurrentNodeExecuted ? activeNode?.issues : undefined,
+				executionStatus,
+			},
+			activeCredentials: activeCredential
+				? { name: activeCredential?.name, displayName: activeCredential?.displayName }
+				: undefined,
+		};
+	}
+
 	async function initSupportChat(userMessage: string, credentialType?: ICredentialType) {
-		const id = getRandomId();
 		resetAssistantChat();
 		chatSessionTask.value = credentialType ? 'credentials' : 'support';
+		const visualContext = getVisualContext();
+		const activeNode = workflowsStore.activeNode() as INode;
+		const { authType, nodeInputData, schemas } = getNodeInfoForAssistant(activeNode);
+
+		if (authType && chatSessionTask.value === 'credentials') {
+			userMessage += ` I am using ${authType.name}.`;
+		}
+
+		const id = getRandomId();
 		chatSessionCredType.value = credentialType;
 		addUserMessage(userMessage, id);
 		addLoadingAssistantMessage(locale.baseText('aiAssistant.thinkingSteps.thinking'));
@@ -370,6 +419,14 @@ export const useAssistantStore = defineStore(STORES.ASSISTANT, () => {
 			type: 'init-support-chat',
 			user: {
 				firstName: usersStore.currentUser?.firstName ?? '',
+			},
+			context: {
+				...visualContext,
+				activeNodeInfo: {
+					...visualContext?.activeNodeInfo,
+					nodeInputData,
+					referencedNodes: schemas,
+				},
 			},
 			question: userMessage,
 		};
@@ -413,29 +470,8 @@ export const useAssistantStore = defineStore(STORES.ASSISTANT, () => {
 			currentSessionActiveExecutionId.value = workflowsStore.activeExecutionId;
 		}
 
-		// Get all referenced nodes and their schemas
-		const referencedNodeNames = getReferencedNodes(context.node);
-		const schemas = getNodesSchemas(referencedNodeNames);
+		const { authType, nodeInputData, schemas } = getNodeInfoForAssistant(context.node);
 
-		// Get node credentials details for the ai assistant
-		const nodeType = useNodeTypesStore().getNodeType(context.node.type);
-		let authType = undefined;
-		if (nodeType) {
-			const authField = getMainAuthField(nodeType);
-			const credentialInUse = context.node.parameters[authField?.name ?? ''];
-			const availableAuthOptions = getNodeAuthOptions(nodeType);
-			authType = availableAuthOptions.find((option) => option.value === credentialInUse);
-		}
-		let nodeInputData: { inputNodeName?: string; inputData?: IDataObject } | undefined = undefined;
-		const ndvInput = ndvStore.ndvInputData;
-		if (isNodeReferencingInputData(context.node) && ndvInput?.length) {
-			const inputData = ndvStore.ndvInputData[0].json;
-			const inputNodeName = ndvStore.input.nodeName;
-			nodeInputData = {
-				inputNodeName,
-				inputData,
-			};
-		}
 		addLoadingAssistantMessage(locale.baseText('aiAssistant.thinkingSteps.analyzingError'));
 		openChat();
 
@@ -536,6 +572,7 @@ export const useAssistantStore = defineStore(STORES.ASSISTANT, () => {
 			) {
 				nodeExecutionStatus.value = 'not_executed';
 			}
+			const userContext = getVisualContext();
 			chatWithAssistant(
 				rootStore.restApiContext,
 				{
@@ -544,6 +581,7 @@ export const useAssistantStore = defineStore(STORES.ASSISTANT, () => {
 						type: 'message',
 						text: chatMessage.text,
 						quickReplyType: chatMessage.quickReplyType,
+						context: userContext,
 					},
 					sessionId: currentSessionId.value,
 				},
