@@ -1081,7 +1081,19 @@ export class Nasa implements INodeType {
 							responseData.hdurl as string,
 						);
 
-						const filename = (responseData.hdurl as string).split('/');
+						// RIA
+						// let filename: string[];
+						if (responseData.media_type === 'image') {
+							const filename = (responseData.hdurl as string).split('/');
+							items[i].binary![binaryProperty] = await this.helpers.prepareBinaryData(
+								data as Buffer,
+								filename[filename.length - 1],
+							);
+						}
+						// else {
+						// 	filename = (responseData.url as string).split('/'); // // [ 'https:', '', 'youtube.com', 'embed', 'hwQTH0IGrwE?rel=0' ]
+						// }
+						// perhaps when it's video the data sent is also bufferable!? can we use mimetype: video?
 
 						const newItem: INodeExecutionData = {
 							json: items[i].json,
@@ -1095,11 +1107,6 @@ export class Nasa implements INodeType {
 						}
 
 						items[i] = newItem;
-
-						items[i].binary![binaryProperty] = await this.helpers.prepareBinaryData(
-							data as Buffer,
-							filename[filename.length - 1],
-						);
 					}
 				}
 
@@ -1108,7 +1115,7 @@ export class Nasa implements INodeType {
 					{ itemData: { item: i } },
 				);
 
-				returnData.push(...executionData);
+				returnData.push(...executionData); // RIA: returnData.concat(executionData) better?
 			} catch (error) {
 				if (this.continueOnFail()) {
 					if (resource === 'earthImagery' && operation === 'get') {
@@ -1120,7 +1127,7 @@ export class Nasa implements INodeType {
 							this.helpers.returnJsonArray({ error: error.message }),
 							{ itemData: { item: i } },
 						);
-						returnData.push(...executionErrorData);
+						returnData.push(...executionErrorData); // RIA: returnData.concat(executionData) better?
 					}
 					continue;
 				}
