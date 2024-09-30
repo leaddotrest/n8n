@@ -21,3 +21,15 @@ export const requestLicenseTrial = async (
 ): Promise<UsageState['data']> => {
 	return await makeRestApiRequest(context, 'POST', '/license/enterprise/request_trial');
 };
+
+export const registerCommunityEdition = async (
+	context: IRestApiContext,
+	data: { email: string },
+): Promise<{ title: string; text: string }> => {
+	return await makeRestApiRequest(
+		context,
+		'POST',
+		'/license/enterprise/community-registered',
+		data,
+	);
+};
