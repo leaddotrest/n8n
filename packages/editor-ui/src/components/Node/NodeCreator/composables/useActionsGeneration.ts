@@ -1,6 +1,6 @@
 import type { ActionTypeDescription, ActionsRecord, SimplifiedNodeType } from '@/Interface';
 import { CUSTOM_API_CALL_KEY, HTTP_REQUEST_NODE_TYPE } from '@/constants';
-import { memoize, startCase } from 'lodash-es';
+import { memoize, startCase, capitalize } from 'lodash-es';
 import type {
 	ICredentialType,
 	INodeProperties,
@@ -192,7 +192,8 @@ function resourceCategories(nodeTypeDescription: INodeTypeDescription): ActionTy
 				const items = ((operations.options as INodePropertyOptions[]) || []).map(
 					(operationOption) => {
 						const displayName =
-							operationOption.action ?? `${resourceOption.name} ${startCase(operationOption.name)}`;
+							operationOption.action ??
+							`${resourceOption.name} ${capitalize(operationOption.name)}`;
 
 						// We need to manually populate displayOptions as they are not present in the node description
 						// if the resource has only one option
